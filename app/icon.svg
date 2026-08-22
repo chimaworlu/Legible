@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient using brand colors -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00B407" />
+      <stop offset="60%" stop-color="#005301" />
+      <stop offset="100%" stop-color="#002200" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
+
+  <!-- Handwritten line: the messy input -->
+  <path d="M196,204 Q256,150 316,204" stroke="#ffffff" stroke-width="34" fill="none" stroke-linecap="round" />
+
+  <!-- Structured lines: the digital output -->
+  <rect x="141" y="258" width="230" height="34" rx="17" fill="#ffffff" />
+  <rect x="178" y="326" width="156" height="34" rx="17" fill="#ffffff" />
+
+  <!-- Low-confidence flag underline: the product's honesty signature -->
+  <line x1="141" y1="422" x2="371" y2="422" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-dasharray="8 26" opacity="0.85" />
+</svg>

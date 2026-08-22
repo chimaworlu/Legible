@@ -1,0 +1,321 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+enum PaymentLogSource {
+  CHECKOUT
+  WEBHOOK
+  CALLBACK
+  // A billing action the user took directly in our own UI (e.g. cancelling
+  // from the billing modal) rather than anything Flutterwave sent us.
+  DASHBOARD
+}
+
+// Append-only audit trail of every payment-related event, regardless of
+// outcome — the trusted layer underneath Transaction (which only gets a row
+// once a charge is actually granted). Deliberately NOT a relation to User:
+// this must survive account deletion (R29) rather than cascade with it, or
+// it stops being a trustworthy audit log the moment someone deletes their
+// account. Never updated or deleted after being written.
+model PaymentLog {
+  id            String           @id @default(cuid())
+  source        PaymentLogSource
+  eventType     String
+  outcome       String
+  userId        String?
+  txRef         String?
+  transactionId String?
+  amountMinor   Int?
+  currency      String?
+  // Raw event data with customer/card PII stripped before storage
+  // (security.md rule 14 — log ids, not content).
+  payload       Json?
+  createdAt     DateTime         @default(now())
+
+  @@index([userId])
+  @@index([txRef])
+  @@index([createdAt])
+}
+
+enum BookStatus {
+  DRAFT
+  PROCESSING
+  READY
+  ARCHIVED
+}
+
+enum ImageStatus {
+  UPLOADED
+  QUALITY_FAILED
+  ACCEPTED
+  TRANSCRIBED
+  FAILED
+}
+
+enum SectionConfidence {
+  HIGH
+  LOW
+  GAP
+}
+
+enum FlagType {
+  LOW
+  GAP
+}
+
+enum JobType {
+  TRANSCRIBE
+  STRUCTURE
+  EXPORT
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  PARTIAL
+}
+
+enum PlanType {
+  FREE
+  PRO
+}
+
+enum RenewalMode {
+  AUTO
+  MANUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum TransactionType {
+  SUBSCRIPTION_CHARGE
+  CREDIT_PURCHASE
+  CREDIT_SPEND
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  passwordHash      String?
+  name              String?
+  emailVerified     Boolean            @default(false)
+  plan              PlanType           @default(FREE)
+  creditBalance     Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  books             Book[]
+  jobs              Job[]
+  transactions      Transaction[]
+  subscription      Subscription?
+  verificationCodes VerificationCode[]
+  passwordResetCodes PasswordResetCode[]
+}
+
+model VerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetCode {
+  id         String    @id @default(cuid())
+  userId     String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model IdempotencyKey {
+  key            String   @id
+  requestHash    String
+  status         String
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  userId           String             @unique
+  status           SubscriptionStatus @default(ACTIVE)
+  // AUTO: paid by card with a Payment Plan attached — Flutterwave auto-
+  // charges each cycle. MANUAL: paid by transfer/USSD/other — Flutterwave
+  // cannot re-charge these, so the customer must check out again each
+  // period (see src/services/billing/reconcile.ts).
+  renewalMode      RenewalMode        @default(AUTO)
+  currentPeriodEnd DateTime
+  providerRef      String?
+  // The customer email Flutterwave itself recorded against the recurring
+  // subscription it created for this grant (VerifiedTransaction.customerEmail)
+  // — not necessarily equal to User.email. Needed to look the provider
+  // subscription back up later (e.g. to cancel it): filtering /v3/subscriptions
+  // by our own copy of the email can silently match nothing, since Flutterwave
+  // can store a different one against the customer/subscription object
+  // (confirmed live against the sandbox).
+  providerCustomerEmail String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Book {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String
+  status    BookStatus    @default(DRAFT)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images    SourceImage[]
+  chapters  Chapter[]
+  jobs      Job[]
+  sections  Section[]
+
+  @@index([userId])
+}
+
+model SourceImage {
+  id           String      @id @default(cuid())
+  bookId       String
+  storageKey   String
+  format       String
+  qualityScore Float?
+  status       ImageStatus @default(UPLOADED)
+  imageOrder   Int?
+  createdAt    DateTime    @default(now())
+  book         Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  sections     Section[]
+  diagrams     Diagram[]
+
+  @@index([bookId])
+}
+
+model Chapter {
+  id        String    @id @default(cuid())
+  bookId    String
+  title     String
+  order     Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  book      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  sections  Section[]
+
+  @@index([bookId])
+}
+
+model Section {
+  id            String              @id @default(cuid())
+  bookId        String
+  chapterId     String?
+  sourceImageId String
+  order         Int
+  originalText  String
+  editedText    String?
+  confidence    SectionConfidence   @default(HIGH)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  book          Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter       Chapter?            @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  sourceImage   SourceImage         @relation(fields: [sourceImageId], references: [id], onDelete: Cascade)
+  flags         TranscriptionFlag[]
+  diagrams      Diagram[]
+
+  @@index([bookId])
+  @@index([chapterId])
+}
+
+model TranscriptionFlag {
+  id          String   @id @default(cuid())
+  sectionId   String
+  startOffset Int
+  endOffset   Int
+  type        FlagType
+  suggestion  String?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  section     Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+}
+
+model Diagram {
+  id            String      @id @default(cuid())
+  sourceImageId String
+  sectionId     String?
+  storageKey    String
+  caption       String?
+  order         Int?
+  createdAt     DateTime    @default(now())
+  sourceImage   SourceImage @relation(fields: [sourceImageId], references: [id], onDelete: Cascade)
+  section       Section?    @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([sourceImageId])
+  @@index([sectionId])
+}
+
+model Job {
+  id            String    @id @default(cuid())
+  userId        String
+  bookId        String
+  sourceImageId String?
+  type          JobType
+  status        JobStatus @default(QUEUED)
+  attempts      Int       @default(0)
+  error         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book          Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([userId])
+  @@index([status])
+  @@index([sourceImageId])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String
+  type        TransactionType
+  amountMinor Int?
+  currency    String          @default("NGN")
+  credits     Int?
+  reference   String?         @unique
+  createdAt   DateTime        @default(now())
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

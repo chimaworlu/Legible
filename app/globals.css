@@ -1,0 +1,255 @@
+@import '../design-tokens.css';
+
+/* Dark theme: follows the OS/browser color-scheme preference automatically.
+   Overrides only the semantic color-role variables (not primitives,
+   spacing, or typography) with the standard Material Design 3 dark-tone
+   mapping, using tones already generated in the primitive palettes. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-roles-primary: var(--primitive-colors-primary-color-palette-primary80);
+    --color-roles-on-primary: var(--primitive-colors-primary-color-palette-primary20);
+    --color-roles-primary-container: var(--primitive-colors-primary-color-palette-primary30);
+    --color-roles-on-primary-container: var(--primitive-colors-primary-color-palette-primary90);
+    --color-roles-secondary: var(--primitive-colors-secondary-color-palette-secondary80);
+    --color-roles-on-secondary: var(--primitive-colors-secondary-color-palette-secondary20);
+    --color-roles-secondary-container: var(--primitive-colors-secondary-color-palette-secondary30);
+    --color-roles-on-secondary-container: var(--primitive-colors-secondary-color-palette-secondary90);
+    --color-roles-tertiary: var(--primitive-colors-tertiary-color-palette-tertiary80);
+    --color-roles-on-tertiary: var(--primitive-colors-tertiary-color-palette-tertiary20);
+    --color-roles-tertiary-container: var(--primitive-colors-tertiary-color-palette-tertiary30);
+    --color-roles-on-tertiary-container: var(--primitive-colors-tertiary-color-palette-tertiary90);
+    --color-roles-error: var(--primitive-colors-error-color-palette-error80);
+    --color-roles-on-error: var(--primitive-colors-error-color-palette-error20);
+    --color-roles-error-container: var(--primitive-colors-error-color-palette-error30);
+    --color-roles-on-error-container: var(--primitive-colors-error-color-palette-error90);
+    --color-roles-surface: var(--primitive-colors-neutral-color-palette-neutral6);
+    --color-roles-on-surface: var(--primitive-colors-neutral-color-palette-neutral90);
+    --color-roles-surface-variant: var(--primitive-colors-neutral-variant-palette-neutral-variant30);
+    --color-roles-on-surface-variant: var(--primitive-colors-neutral-variant-palette-neutral-variant80);
+    --color-roles-surface-container-highest: var(--primitive-colors-neutral-color-palette-neutral22);
+    --color-roles-surface-container-high: var(--primitive-colors-neutral-color-palette-neutral17);
+    --color-roles-surface-container: var(--primitive-colors-neutral-color-palette-neutral12);
+    --color-roles-surface-container-low: var(--primitive-colors-neutral-color-palette-neutral10);
+    --color-roles-surface-container-lowest: var(--primitive-colors-neutral-color-palette-neutral4);
+    --color-roles-inverse-surface: var(--primitive-colors-neutral-color-palette-neutral90);
+    --color-roles-inverse-on-surface: var(--primitive-colors-neutral-color-palette-neutral20);
+    --color-roles-surface-tint: var(--primitive-colors-primary-color-palette-primary80);
+    --color-roles-surface-tint-color: var(--primitive-colors-primary-color-palette-primary80);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: var(--typography-body-medium-font-family), sans-serif;
+  background-color: var(--color-roles-surface);
+  color: var(--color-roles-on-surface);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nav-link-hover {
+  position: relative;
+  color: var(--color-roles-on-surface-variant);
+  text-decoration: none;
+  font-family: var(--typography-label-large-font-family), sans-serif;
+  font-size: var(--typography-label-large-font-size);
+  font-weight: var(--typography-label-large-font-weight);
+  line-height: var(--typography-label-large-line-height);
+  padding-bottom: 4px;
+  transition: color 0.25s ease;
+}
+
+.nav-link-hover::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background-color: var(--color-roles-primary);
+  border-radius: 1px;
+  transition: width 0.25s ease-in-out;
+}
+
+.nav-link-hover:hover {
+  color: var(--color-roles-primary);
+}
+
+.nav-link-hover:hover::after {
+  width: 100%;
+}
+
+.nav-link-hover:focus-visible {
+  color: var(--color-roles-primary);
+  outline: 2px solid var(--color-roles-primary);
+  outline-offset: 6px;
+  border-radius: 4px;
+  padding: 4px 8px;
+  padding-bottom: 8px;
+}
+
+.nav-link-hover:focus-visible::after {
+  width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-roles-primary);
+  outline-offset: 2px;
+}
+
+.header-brand-link:focus-visible {
+  outline: 2px solid var(--color-roles-primary);
+  outline-offset: 6px;
+  padding: 4px;
+}
+
+.header-cta-button,
+.hero-primary-button,
+.hero-secondary-button,
+.contact-submit-button {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+
+.header-cta-button:hover,
+.hero-primary-button:hover,
+.contact-submit-button:not(:disabled):hover {
+  box-shadow: var(--effect-medium-shadow);
+  transform: translateY(-1px);
+}
+
+.hero-secondary-button:hover {
+  opacity: 0.8;
+}
+
+.header-cta-button:focus-visible {
+  outline: 2px solid var(--color-roles-on-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.hero-primary-button:focus-visible {
+  outline: 2px solid var(--color-roles-on-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.15);
+}
+
+.hero-secondary-button:focus-visible {
+  outline: 2px solid var(--color-roles-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.contact-input:focus-visible {
+  outline: 2px solid var(--color-roles-primary);
+  outline-offset: 1px;
+  border-color: var(--color-roles-primary);
+}
+
+.contact-submit-button:focus-visible {
+  outline: 2px solid var(--color-roles-on-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Mobile responsive header ── */
+@media (max-width: 768px) {
+  .site-header {
+    padding: 0 var(--spacing-collection-large-spacing) !important;
+  }
+
+  .hamburger-button {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .desktop-cta {
+    display: none !important;
+  }
+
+  .hero-primary-button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .hero-section {
+    padding-left: var(--spacing-collection-large-spacing) !important;
+    padding-right: var(--spacing-collection-large-spacing) !important;
+  }
+}
+
+/* Dashboard header "Upgrade Plan" button: shortens to "Upgrade" at the same
+   mobile breakpoint used elsewhere, so it doesn't crowd the account name
+   next to it on a narrow screen. Same position either width, just narrower. */
+.upgrade-plan-short {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .upgrade-plan-full {
+    display: none;
+  }
+
+  .upgrade-plan-short {
+    display: inline;
+  }
+}
+
+/* Dashboard stat-card trend pill: top-right of the card by default (out of
+   flow, so .stat-value-row's own layout doesn't matter there).
+
+   The stat grid is `auto-fit, minmax(12rem, 1fr)`, so the same viewport
+   width can land a card as either the full row (wide — plenty of room next
+   to "(N MAX)") or one of two side-by-side cards (narrow — the pill would
+   overlap the label). That's a property of the card's own rendered width,
+   not the viewport, so this is a container query keyed to the card itself
+   (via .stat-card's container-type below) rather than a @media breakpoint
+   — a @media rule can't tell which of those two grid layouts produced a
+   given screen width. Below the threshold, the pill drops into flow inside
+   .stat-value-row instead, sharing the bottom row with the number. */
+.stat-card {
+  container-type: inline-size;
+  container-name: stat-card;
+}
+
+.stat-trend-pill {
+  position: absolute;
+  top: var(--spacing-collection-small-spacing);
+  right: var(--spacing-collection-small-spacing);
+}
+
+@container stat-card (max-width: 260px) {
+  .stat-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .stat-trend-pill {
+    position: static;
+  }
+}
+
+@keyframes mobileMenuFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

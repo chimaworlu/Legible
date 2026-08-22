@@ -1,0 +1,16 @@
+{
+  "name": "Legible - Handwritten Notes to Digital Book",
+  "short_name": "Legible",
+  "description": "Turn photos of handwritten student notes into a clean, structured digital book.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#002200",
+  "theme_color": "#00B407",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
