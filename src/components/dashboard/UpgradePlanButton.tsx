@@ -20,10 +20,12 @@ export function UpgradePlanButton({
   plan,
   currentInterval,
   currentPeriodEnd,
+  cancelAtPeriodEnd,
 }: {
   plan: string;
   currentInterval?: BillingInterval | null;
   currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -35,7 +37,13 @@ export function UpgradePlanButton({
       </button>
 
       {open && (
-        <UpgradePlanModal plan={plan} currentInterval={currentInterval} currentPeriodEnd={currentPeriodEnd} onClose={() => setOpen(false)} />
+        <UpgradePlanModal
+          plan={plan}
+          currentInterval={currentInterval}
+          currentPeriodEnd={currentPeriodEnd}
+          cancelAtPeriodEnd={cancelAtPeriodEnd}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
   );

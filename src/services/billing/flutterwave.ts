@@ -44,32 +44,23 @@ async function flutterwaveRequest<T>(path: string, init: RequestInit): Promise<T
 
 export type BillingInterval = "monthly" | "yearly";
 
-// Payment Plans are reusable objects — created once, then referenced by id
-// on every checkout for that interval. In-memory cache covers a single
-// running process; set FLUTTERWAVE_MONTHLY_PLAN_ID/FLUTTERWAVE_YEARLY_PLAN_ID
-// once you've created them for a stable id across restarts and instances.
-const planIdCache = new Map<BillingInterval, string>();
-
-export async function getOrCreatePaymentPlanId(interval: BillingInterval, amountMinor: number): Promise<string> {
-  const configured = interval === "monthly" ? config.billing.flutterwave.monthlyPlanId : config.billing.flutterwave.yearlyPlanId;
-  if (configured) return configured;
-
-  const cached = planIdCache.get(interval);
-  if (cached) return cached;
-
+// One Payment Plan per user, never one shared per interval across every
+// customer (that was the earlier design — see cancelActiveSubscriptionsForPlan's
+// doc comment for why it made cancellation unsafe). Always creates a fresh
+// plan; the caller (checkout/route.ts) decides whether to reuse a
+// previously-created one (Subscription.providerPlanId) or call this again —
+// a real interval or price change needs a new plan object regardless, since
+// a Payment Plan's amount/interval are fixed at creation.
+export async function createUserPaymentPlan(input: { userId: string; interval: BillingInterval; amountMinor: number }): Promise<string> {
   const plan = await flutterwaveRequest<{ id: number }>("/payment-plans", {
     method: "POST",
     body: JSON.stringify({
-      name: `PRO (${interval})`,
-      amount: amountMinor / 100,
-      interval,
+      name: `PRO ${input.interval} — ${input.userId}`,
+      amount: input.amountMinor / 100,
+      interval: input.interval,
     }),
   });
-
-  const planId = String(plan.id);
-  planIdCache.set(interval, planId);
-  console.warn(`Created Flutterwave payment plan for ${interval} billing: ${planId}. Pin it via FLUTTERWAVE_${interval.toUpperCase()}_PLAN_ID to avoid recreating it on every restart.`);
-  return planId;
+  return String(plan.id);
 }
 
 export type StandardCheckout = { link: string };
@@ -83,7 +74,7 @@ export type StandardCheckout = { link: string };
 // "the payment method will automatically be fixed to card"), which is
 // exactly what auto-renewing subscriptions need. Omit it to offer other
 // methods (transfer, USSD, ...) via paymentOptions instead — those charges
-// are one-off; Flutterwave has no way to re-charge them next cycle.
+// are one-off; Flutterwave has no way to re-charge them next cycle (R32).
 export async function createStandardCheckout(input: {
   txRef: string;
   amountMinor: number;
@@ -110,26 +101,32 @@ export async function createStandardCheckout(input: {
   return { link: data.link };
 }
 
-export type ProviderSubscription = { id: number; amount: number; status: string };
-
-// DO NOT filter/cancel by email alone and assume the results all belong to
-// one app user. Confirmed live against the Flutterwave sandbox: the
-// customer email it records can be a shared synthetic value reused across
-// DIFFERENT real app users (not derived from whatever email we submit at
-// checkout). An earlier version of this module had a
-// cancelStaleProviderSubscriptions(email, amount) helper built on this
-// endpoint for exactly that purpose — during live testing it cancelled a
-// different customer's unrelated active subscription and was removed. Only
-// cancel a ProviderSubscription.id you already know for certain belongs to
-// the current user (e.g. one they just confirmed on a Flutterwave-hosted
-// page), never one discovered via this list.
-export async function listActiveSubscriptionsForEmail(email: string): Promise<ProviderSubscription[]> {
-  const data = await flutterwaveRequest<ProviderSubscription[]>(`/subscriptions?email=${encodeURIComponent(email)}`, { method: "GET" });
-  return data.filter((subscription) => subscription.status === "active");
-}
+export type ProviderSubscription = { id: number; amount: number; status: string; plan: number };
 
 export async function cancelProviderSubscription(id: number): Promise<void> {
   await flutterwaveRequest<{ status: string }>(`/subscriptions/${id}/cancel`, { method: "PUT" });
+}
+
+// Cancels every active Flutterwave subscription under one Payment Plan.
+// Safe ONLY because planId here must always be a plan created exclusively
+// for one user via createUserPaymentPlan — never a plan shared across
+// multiple users. Confirmed live against the Flutterwave sandbox
+// (2026-08-23): filtering /v3/subscriptions by the OLD shared monthly plan
+// id returned 8 active subscriptions across several different customer ids
+// (all recorded under a near-identical synthetic email) — exactly the
+// failure mode that made the earlier email-based lookup
+// (listActiveSubscriptionsForEmail, since removed) cancel a different
+// customer's unrelated subscription during testing. A per-user plan doesn't
+// have that problem: no other user was ever given this plan id to check out
+// with, so anything found here is this user's own (possibly more than one,
+// e.g. a duplicate checkout — cancelling all of them is still correct).
+// Does not paginate past the first page of results; fine for a per-user
+// plan's small subscription count, but would need to if that assumption
+// ever changes.
+export async function cancelActiveSubscriptionsForPlan(planId: string): Promise<void> {
+  const data = await flutterwaveRequest<ProviderSubscription[]>(`/subscriptions?plan=${encodeURIComponent(planId)}`, { method: "GET" });
+  const active = data.filter((subscription) => subscription.status === "active");
+  await Promise.all(active.map((subscription) => cancelProviderSubscription(subscription.id)));
 }
 
 export type VerifiedTransaction = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNaira, getProBenefits, getProPricing } from "@/src/domain/billing";
+import { formatNaira, getProBenefits, getProPricing, toDbInterval, fromDbInterval } from "@/src/domain/billing";
 import { config } from "@/src/config";
 
 describe("getProPricing", () => {
@@ -38,5 +38,24 @@ describe("formatNaira", () => {
 
   it("never renders a decimal point (integer arithmetic only)", () => {
     expect(formatNaira(500000)).not.toContain(".");
+  });
+});
+
+describe("toDbInterval / fromDbInterval", () => {
+  it("round-trips monthly and yearly through the DB enum representation", () => {
+    expect(toDbInterval("monthly")).toBe("MONTHLY");
+    expect(toDbInterval("yearly")).toBe("YEARLY");
+    expect(fromDbInterval("MONTHLY")).toBe("monthly");
+    expect(fromDbInterval("YEARLY")).toBe("yearly");
+  });
+
+  it("falls back to amount-based inference for a legacy row with no stored interval", () => {
+    expect(fromDbInterval(null, config.plans.PRO.priceMinorMonthly)).toBe("monthly");
+    expect(fromDbInterval(undefined, config.plans.PRO.priceMinorYearly)).toBe("yearly");
+  });
+
+  it("returns null when there's neither a stored interval nor a matching legacy amount", () => {
+    expect(fromDbInterval(null, 12345)).toBeNull();
+    expect(fromDbInterval(null, null)).toBeNull();
   });
 });

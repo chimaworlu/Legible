@@ -393,7 +393,8 @@ function BillingModal({
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canCancel = plan === "PRO" && subscription?.status === "ACTIVE";
+  const canCancel = plan === "PRO" && subscription?.status === "ACTIVE" && !subscription.cancelAtPeriodEnd;
+  const isEndingAtPeriodEnd = plan === "PRO" && subscription?.status === "ACTIVE" && subscription.cancelAtPeriodEnd;
 
   async function handleCancel() {
     setCancelling(true);
@@ -440,7 +441,7 @@ function BillingModal({
                 <strong>{SUBSCRIPTION_STATUS_LABELS[subscription.status] ?? subscription.status}</strong>
               </div>
               <div style={summaryRowStyle}>
-                <span>{subscription.status === "CANCELED" ? "Ended" : "Renews"}</span>
+                <span>{subscription.status === "CANCELED" ? "Ended" : isEndingAtPeriodEnd ? "Ends" : "Renews"}</span>
                 <strong>{formatDate(subscription.currentPeriodEnd)}</strong>
               </div>
             </>
@@ -480,16 +481,34 @@ function BillingModal({
           </div>
         )}
 
+        {isEndingAtPeriodEnd && subscription && (
+          <div style={confirmTextStyle}>
+            Your plan is set to end on {formatDate(subscription.currentPeriodEnd)} and won&apos;t renew.
+            {subscription.renewalMode === "AUTO" && !subscription.providerPlanId
+              ? " Note: if your card is still charged around that date despite this, contact support — we can't guarantee Flutterwave stopped it on their end."
+              : ""}{" "}
+            <button type="button" style={cancelLinkStyle} onClick={onUpgradeClick}>
+              Resume plan
+            </button>
+          </div>
+        )}
+
         {canCancel && !confirming && (
           <button type="button" style={cancelLinkStyle} onClick={() => setConfirming(true)}>
             Cancel Subscription
           </button>
         )}
 
-        {canCancel && confirming && (
+        {canCancel && confirming && subscription && (
           <div style={confirmBoxStyle}>
             <div style={confirmTextStyle}>
-              Cancelling switches your account back to the Free plan immediately, and stops any future automatic charges. This can&apos;t be undone.
+              Cancelling stops automatic renewal — you&apos;ll keep PRO access until {formatDate(subscription.currentPeriodEnd)}, then your account
+              moves to Free.
+              {subscription.renewalMode === "AUTO"
+                ? subscription.providerPlanId
+                  ? " Your card won't be charged again."
+                  : " Note: we can't guarantee this stops Flutterwave from charging your card again on its own schedule — contact support if that happens."
+                : ""}
             </div>
             {error && <div style={errorTextStyle}>{error}</div>}
             <div style={confirmButtonRowStyle}>
@@ -604,6 +623,7 @@ export function UserMenu({
           plan={plan}
           currentInterval={currentInterval}
           currentPeriodEnd={subscription?.currentPeriodEnd ?? null}
+          cancelAtPeriodEnd={subscription?.cancelAtPeriodEnd ?? false}
           onClose={() => setUpgradeModalOpen(false)}
         />
       )}

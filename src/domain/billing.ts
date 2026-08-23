@@ -43,10 +43,12 @@ export function formatNaira(amountMinor: number): string {
 
 export type BillingInterval = "monthly" | "yearly";
 
-// There's no stored "interval" field on Subscription (see
-// database-schema.md) — a user's current billing interval is derived from
-// the amount of their latest SUBSCRIPTION_CHARGE Transaction, the same way
-// reconcileTransaction derives it when granting one.
+// Every SUBSCRIPTION_CHARGE always charges exactly one plan's full price
+// (see nextPeriodStart in domain/subscription.ts — a mid-cycle switch queues
+// a full-price period after the current one instead of prorating a partial
+// charge), so this is a reliable fallback for rows written before
+// Transaction.interval existed. Prefer the stored field via fromDbInterval
+// below when it's available; this is what it falls back to when it isn't.
 export function intervalForAmountMinor(amountMinor: number): BillingInterval | null {
   const pricing = getProPricing();
   if (amountMinor === pricing.monthlyMinor) return "monthly";
@@ -57,3 +59,22 @@ export function intervalForAmountMinor(amountMinor: number): BillingInterval | n
 export function otherInterval(interval: BillingInterval): BillingInterval {
   return interval === "monthly" ? "yearly" : "monthly";
 }
+
+export type DbBillingInterval = "MONTHLY" | "YEARLY";
+
+export function toDbInterval(interval: BillingInterval): DbBillingInterval {
+  return interval === "monthly" ? "MONTHLY" : "YEARLY";
+}
+
+// amountMinorFallback covers rows written before Transaction.interval
+// existed — see intervalForAmountMinor's doc comment.
+export function fromDbInterval(
+  value: DbBillingInterval | null | undefined,
+  amountMinorFallback?: number | null,
+): BillingInterval | null {
+  if (value === "MONTHLY") return "monthly";
+  if (value === "YEARLY") return "yearly";
+  return amountMinorFallback != null ? intervalForAmountMinor(amountMinorFallback) : null;
+}
+
+export const BILLING_PERIOD_DAYS: Record<BillingInterval, number> = { monthly: 30, yearly: 365 };

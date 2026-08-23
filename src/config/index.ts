@@ -43,15 +43,11 @@ export const config = {
       secretKey: process.env.FLUTTERWAVE_SECRET_KEY ?? "",
       secretHash: process.env.FLUTTERWAVE_SECRET_HASH ?? "",
       redirectUrl: process.env.FLUTTERWAVE_REDIRECT_URL ?? "",
-      // Reusable Payment Plan ids (Settings > Payment Plans). Left unset in
-      // dev — the adapter lazily creates one per interval on first use and
-      // logs the id so it can be pinned here.
-      monthlyPlanId: process.env.FLUTTERWAVE_MONTHLY_PLAN_ID ?? "",
-      yearlyPlanId: process.env.FLUTTERWAVE_YEARLY_PLAN_ID ?? "",
       // developer.flutterwave.com/v3.0.0/docs/payment-methods — NGN-eligible
       // methods. "card" is deliberately its own bucket: attaching a Payment
       // Plan (required for auto-renewal) forces Flutterwave to card-only, so
-      // the two paths must never be offered in the same checkout request.
+      // the two paths must never be offered in the same checkout request
+      // (R32 — support card, bank transfer, and USSD).
       cardOnlyPaymentOptions: "card",
       manualPaymentOptions: "ussd,banktransfer,account,internetbanking,nqr,enaira,opay",
     },
