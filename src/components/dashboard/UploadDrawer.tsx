@@ -341,9 +341,13 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
 
   // Lets the unmount-cleanup effect below always see the latest files
   // without re-subscribing on every state change (it only needs to run once,
-  // at actual unmount — see its own comment).
+  // at actual unmount — see its own comment). Synced in an effect, not
+  // during render: mutating a ref while rendering is unsafe even when
+  // idempotent (react-hooks/refs).
   const filesRef = useRef(files);
-  filesRef.current = files;
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   useEffect(() => {
     if (!open) return;
@@ -359,10 +363,16 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
   // The drawer stays mounted between opens (see the comment on the effect
   // below), so a fresh open has to explicitly clear a success screen left
   // over from the previous batch — otherwise reopening to upload more shows
-  // "Upload Complete!" again instead of the drop zone.
-  useEffect(() => {
+  // "Upload Complete!" again instead of the drop zone. Done by comparing
+  // against the previous `open` value directly in the render body (React's
+  // "adjusting state during render" pattern) rather than in an effect,
+  // which the lint rule flags as an avoidable cascading render
+  // (react-hooks/set-state-in-effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) setUploadSucceeded(false);
-  }, [open]);
+  }
 
   // The drawer stays mounted (controlled by `open`, not conditionally
   // rendered by its parent), so object URLs created via addFiles only get
