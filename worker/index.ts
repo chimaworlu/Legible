@@ -11,6 +11,7 @@ import type { Job } from "@prisma/client";
 import { config } from "@/src/config";
 import { jobRepo } from "@/src/db/repositories/job";
 import { runTranscribeJob } from "./jobs/transcribe";
+import { runSummarizeJob } from "./jobs/summarize";
 import { createSemaphore } from "@/src/lib/semaphore";
 
 const POLL_INTERVAL_MS = 5000;
@@ -21,18 +22,24 @@ function providerConcurrency(providerName: string): number {
   return providers[providerName]?.rateLimit.maxConcurrency ?? 1;
 }
 
-// One handler per JobType this worker knows how to run. STRUCTURE and
-// EXPORT have no handler yet (out of scope — see the transcribe-only
-// pipeline plan).
+// One handler per JobType this worker knows how to run. STRUCTURE/EXPORT
+// have no handler yet (out of scope — see the transcribe-only pipeline
+// plan); SUMMARIZE is a separate, independent action from the TRANSCRIBE
+// pipeline (worker/jobs/summarize.ts's own doc comment).
 const JOB_HANDLERS: Partial<Record<Job["type"], (job: Job) => Promise<void>>> = {
   TRANSCRIBE: runTranscribeJob,
+  SUMMARIZE: runSummarizeJob,
 };
 
 export async function runWorker() {
   console.log("Worker started...");
-  // Concurrency is capped per provider (law 15).
+  // Concurrency is capped per provider (law 15); TRANSCRIBE and SUMMARIZE
+  // can use different providers (config.ai.activeProvider vs.
+  // summarizeProvider), so each job type gets its own semaphore rather than
+  // sharing one sized for whichever provider happened to be read first.
   const semaphores: Partial<Record<Job["type"], ReturnType<typeof createSemaphore>>> = {
     TRANSCRIBE: createSemaphore(providerConcurrency(config.ai.activeProvider)),
+    SUMMARIZE: createSemaphore(providerConcurrency(config.ai.summarizeProvider)),
   };
 
   async function pollOnce() {
