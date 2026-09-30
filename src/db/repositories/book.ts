@@ -1,4 +1,5 @@
 import { prisma } from '../client';
+import type { BookStatus } from '@prisma/client';
 
 export const bookRepo = {
   findForUser: async (id: string, userId: string) => {
@@ -34,5 +35,16 @@ export const bookRepo = {
 
   delete: async (id: string) => {
     return prisma.book.delete({ where: { id } });
+  },
+
+  updateStatus: async (id: string, status: BookStatus) => {
+    return prisma.book.update({ where: { id }, data: { status } });
+  },
+
+  // Atomic increment (ai-pipeline.md law 11) — concurrent per-image
+  // TRANSCRIBE jobs against the same book must never race-lose a cost
+  // update.
+  incrementCostSpent: async (id: string, amountMinor: number) => {
+    return prisma.book.update({ where: { id }, data: { aiCostSpentMinor: { increment: amountMinor } } });
   }
 };

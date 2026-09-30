@@ -17,4 +17,12 @@ export const queue = {
       })),
     );
   },
+
+  async enqueueSummarizeJob(input: { userId: string; bookId: string; sourceImageId: string }) {
+    await jobRepo.createMany([{ ...input, type: "SUMMARIZE" as const }]);
+  },
+
+  async enqueueExportJob(input: { userId: string; bookId: string }) {
+    await jobRepo.createMany([{ ...input, type: "EXPORT" as const }]);
+  },
 };

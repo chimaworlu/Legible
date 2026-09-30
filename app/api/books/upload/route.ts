@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import { userRepo } from "@/src/db/repositories/user";
@@ -5,7 +6,6 @@ import { bookRepo } from "@/src/db/repositories/book";
 import { sourceImageRepo } from "@/src/db/repositories/sourceImage";
 import { getPlanLimits, checkBookCreationAllowance, checkImageUploadAllowance } from "@/src/domain/planLimits";
 import { storage } from "@/src/services/storage";
-import { queue } from "@/src/services/queue";
 import { config } from "@/src/config";
 import { checkRateLimit, rateLimitedResponse } from "@/src/services/rateLimit";
 
@@ -88,10 +88,19 @@ export async function POST(req: Request) {
   const storedKeys: string[] = [];
   let createdImageIds: string[] = [];
 
+  // Minted up front so the same id can be used both as the R2 object key
+  // (users/<userId>/books/<bookId>/originals/<imageId>.<ext>) and the
+  // SourceImage row's own id — the object write has to happen before the row
+  // exists, but the key still needs to encode which image it belongs to.
+  const imageIds = files.map(() => randomUUID());
+
   try {
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const storageKey = await storage.putBookImage({
+        userId,
         bookId: book.id,
+        imageId: imageIds[i],
         fileName: file.name,
         contentType: file.type,
         body: new Uint8Array(await file.arrayBuffer()),
@@ -103,15 +112,16 @@ export async function POST(req: Request) {
     const images = await sourceImageRepo.createMany(
       book.id,
       files.map((file, index) => ({
+        id: imageIds[index],
         storageKey: storedKeys[index],
         format: file.type.replace("image/", ""),
         imageOrder: index,
       })),
     );
     createdImageIds = images.map((image) => image.id);
-
-    // R8: one TRANSCRIBE job per accepted image.
-    await queue.enqueueTranscribeJobs({ userId, bookId: book.id, sourceImageIds: createdImageIds });
+    // Transcription is enqueued separately, only when the student clicks
+    // "Start Processing" (POST /api/books/[bookId]/process) — uploading
+    // just stores images, it never starts the pipeline on its own.
   } catch (error) {
     console.error("Upload failed:", error);
     await Promise.allSettled(createdImageIds.map((id) => sourceImageRepo.deleteManyByIds([id])));
@@ -127,7 +137,7 @@ export async function POST(req: Request) {
         title: book.title,
       },
       uploadedCount: files.length,
-      message: "Upload complete. Images stored and transcription jobs queued.",
+      message: "Upload complete. Images stored.",
     },
     { status: 201 },
   );
