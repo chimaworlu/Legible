@@ -12,23 +12,30 @@ import { config } from "@/src/config";
 import { jobRepo } from "@/src/db/repositories/job";
 import { runTranscribeJob } from "./jobs/transcribe";
 import { runSummarizeJob } from "./jobs/summarize";
+import { runExportJob } from "./jobs/export";
 import { createSemaphore } from "@/src/lib/semaphore";
 
 const POLL_INTERVAL_MS = 5000;
 const BATCH_SIZE = 20;
+
+// PDF generation is CPU/IO-bound, not gated by an AI provider's rate limit —
+// a small fixed cap is enough for a single worker process, unlike
+// providerConcurrency below which TRANSCRIBE/SUMMARIZE need.
+const EXPORT_CONCURRENCY = 3;
 
 function providerConcurrency(providerName: string): number {
   const providers = config.ai.providers as Record<string, { rateLimit: { maxConcurrency: number } }>;
   return providers[providerName]?.rateLimit.maxConcurrency ?? 1;
 }
 
-// One handler per JobType this worker knows how to run. STRUCTURE/EXPORT
-// have no handler yet (out of scope — see the transcribe-only pipeline
-// plan); SUMMARIZE is a separate, independent action from the TRANSCRIBE
-// pipeline (worker/jobs/summarize.ts's own doc comment).
+// One handler per JobType this worker knows how to run. STRUCTURE has no
+// handler yet (out of scope — see the transcribe-only pipeline plan);
+// SUMMARIZE and EXPORT are separate, independent actions from the
+// TRANSCRIBE pipeline (see each job file's own doc comment).
 const JOB_HANDLERS: Partial<Record<Job["type"], (job: Job) => Promise<void>>> = {
   TRANSCRIBE: runTranscribeJob,
   SUMMARIZE: runSummarizeJob,
+  EXPORT: runExportJob,
 };
 
 export async function runWorker() {
@@ -40,6 +47,7 @@ export async function runWorker() {
   const semaphores: Partial<Record<Job["type"], ReturnType<typeof createSemaphore>>> = {
     TRANSCRIBE: createSemaphore(providerConcurrency(config.ai.activeProvider)),
     SUMMARIZE: createSemaphore(providerConcurrency(config.ai.summarizeProvider)),
+    EXPORT: createSemaphore(EXPORT_CONCURRENCY),
   };
 
   async function pollOnce() {
