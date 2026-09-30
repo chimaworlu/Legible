@@ -81,6 +81,11 @@ enum JobType {
   TRANSCRIBE
   STRUCTURE
   EXPORT
+  // Additive (AGENTS.md 2.3) — on-demand per-section summary, distinct from
+  // and never a replacement for the literal transcript. Runs in a worker job
+  // like every other AI call (AGENTS.md section 4, ai-pipeline.md law 12) —
+  // never called synchronously from a route.
+  SUMMARIZE
 }
 
 enum JobStatus {
@@ -221,6 +226,10 @@ model Book {
   userId    String
   title     String
   status    BookStatus    @default(DRAFT)
+  // Running total of AI spend against this book, in kobo (ai-pipeline.md
+  // law 11, PRD section 6 cost ceiling). Incremented atomically per
+  // successful TRANSCRIBE job — see bookRepo.incrementCostSpent.
+  aiCostSpentMinor Int    @default(0)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -269,6 +278,11 @@ model Section {
   order         Int
   originalText  String
   editedText    String?
+  // On-demand AI summary of originalText, kept in its own field so it is
+  // always displayed separately from — never blended into — the literal
+  // transcript (R10/R11's honesty spirit: a summary is clearly labeled
+  // AI-generated, not presented as what the student actually wrote).
+  summary       String?
   confidence    SectionConfidence   @default(HIGH)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
