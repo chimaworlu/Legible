@@ -9,6 +9,9 @@ export type PlanUsageLimits = {
   // rather than inventing a number.
   booksPerMonth: number | null;
   imagesPerBook: number;
+  // Per-book AI spend ceiling in kobo (ai-pipeline.md law 10/11) — never
+  // let a book's total AI cost exceed this. See src/domain/processingGates.
+  bookAiCostCeilingMinor: number;
 };
 
 // Plan limits (PRD Section 8, R30). Every number is read from src/config,
@@ -19,6 +22,7 @@ export function getPlanLimits(plan: PlanType): PlanUsageLimits {
       imagesPerMonth: config.plans.PRO.imagesPerMonth,
       booksPerMonth: null,
       imagesPerBook: config.caps.bookImageLimitPro,
+      bookAiCostCeilingMinor: config.caps.bookAiCostCeilingMinorPro,
     };
   }
 
@@ -26,6 +30,7 @@ export function getPlanLimits(plan: PlanType): PlanUsageLimits {
     imagesPerMonth: config.plans.FREE.imagesPerMonth,
     booksPerMonth: config.plans.FREE.booksAllowance,
     imagesPerBook: config.caps.bookImageLimitFree,
+    bookAiCostCeilingMinor: config.caps.bookAiCostCeilingMinorFree,
   };
 }
 
