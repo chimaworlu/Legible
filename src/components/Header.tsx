@@ -163,14 +163,15 @@ export default function Header() {
 
       {/* Desktop CTA — hidden on mobile via CSS */}
       <Link
-        href="/auth?mode=signup"
+        href="/auth?mode=login"
         className="header-cta-button desktop-cta"
         style={{
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "var(--color-roles-primary)",
-          color: "var(--color-roles-on-primary)",
+          backgroundColor: "transparent",
+          color: "var(--color-roles-primary)",
+          border: "1px solid var(--color-roles-primary)",
           padding: "0.5rem 1.75rem",
           borderRadius: "0.375rem",
           fontFamily: "var(--typography-label-large-font-family)",
@@ -178,10 +179,9 @@ export default function Header() {
           fontWeight: "var(--typography-label-large-font-weight)",
           lineHeight: "var(--typography-label-large-line-height)",
           textDecoration: "none",
-          boxShadow: "var(--effect-soft-shadow)",
         }}
       >
-        Get Started
+        Log in
       </Link>
 
       {/* Full-screen mobile drawer — toggled by hamburger */}
@@ -240,7 +240,7 @@ export default function Header() {
             Contact
           </Link>
           <Link
-            href="/auth?mode=signup"
+            href="/auth?mode=login"
             className="header-cta-button"
             onClick={() => setMobileMenuOpen(false)}
             style={{
@@ -249,8 +249,9 @@ export default function Header() {
               justifyContent: "center",
               width: "100%",
               boxSizing: "border-box",
-              backgroundColor: "var(--color-roles-primary)",
-              color: "var(--color-roles-on-primary)",
+              backgroundColor: "transparent",
+              color: "var(--color-roles-primary)",
+              border: "1px solid var(--color-roles-primary)",
               padding: "0.5rem 1.5rem",
               borderRadius: "0.375rem",
               fontFamily: "var(--typography-label-large-font-family)",
@@ -258,11 +259,10 @@ export default function Header() {
               fontWeight: "var(--typography-label-large-font-weight)",
               lineHeight: "var(--typography-label-large-line-height)",
               textDecoration: "none",
-              boxShadow: "var(--effect-soft-shadow)",
               marginTop: "0.5rem",
             }}
           >
-            Get Started
+            Log in
           </Link>
         </div>
       )}
