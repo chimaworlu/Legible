@@ -141,6 +141,16 @@ a {
   opacity: 0.8;
 }
 
+.testimonial-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.testimonial-card:hover {
+  box-shadow: var(--effect-medium-shadow);
+  transform: translateY(-2px);
+  border-color: var(--color-roles-primary);
+}
+
 .header-cta-button:focus-visible {
   outline: 2px solid var(--color-roles-on-primary);
   outline-offset: 3px;
