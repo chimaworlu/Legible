@@ -197,11 +197,13 @@ export function UpgradePlanModal({
   plan,
   currentInterval,
   currentPeriodEnd,
+  cancelAtPeriodEnd = false,
   onClose,
 }: {
   plan: string;
   currentInterval?: BillingInterval | null;
   currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -211,7 +213,11 @@ export function UpgradePlanModal({
   const pricing = getProPricing();
   const benefits = getProBenefits();
   const selectedPriceMinor = interval === "monthly" ? pricing.monthlyMinor : pricing.yearlyMinor;
-  const isAlreadyOnSelectedPlan = isPro && interval === currentInterval;
+  // Blocked only when nothing would change: same interval and the plan
+  // isn't set to lapse. If it's cancelling (cancelAtPeriodEnd), paying again
+  // for the same interval is a legitimate resume, not a pointless repurchase
+  // — checkout/route.ts allows this too, this just mirrors it in the UI.
+  const isAlreadyOnSelectedPlan = isPro && interval === currentInterval && !cancelAtPeriodEnd;
 
   function goToCheckout() {
     router.push(`/checkout?interval=${interval}`);
@@ -230,7 +236,9 @@ export function UpgradePlanModal({
               {isPro
                 ? `You're currently on the PRO plan (${currentInterval === "yearly" ? "Yearly" : "Monthly"})${
                     currentPeriodEnd
-                      ? `, renews ${currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
+                      ? cancelAtPeriodEnd
+                        ? `, active until ${currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} — set to end then and won't renew`
+                        : `, renews ${currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
                       : ""
                   }.`
                 : "You're currently on the Free plan. Here's what changes on PRO:"}
@@ -265,7 +273,7 @@ export function UpgradePlanModal({
             <span style={toggleTopRowStyle}>Monthly</span>
             {isPro && (
               <span style={toggleCaptionStyle(interval === "monthly")}>
-                {currentInterval === "monthly" ? "Current Plan" : "Downgrade"}
+                {currentInterval === "monthly" ? (cancelAtPeriodEnd ? "Resume" : "Current Plan") : "Downgrade"}
               </span>
             )}
           </button>
@@ -282,7 +290,7 @@ export function UpgradePlanModal({
             </span>
             {isPro && (
               <span style={toggleCaptionStyle(interval === "yearly")}>
-                {currentInterval === "yearly" ? "Current Plan" : "Upgrade"}
+                {currentInterval === "yearly" ? (cancelAtPeriodEnd ? "Resume" : "Current Plan") : "Upgrade"}
               </span>
             )}
           </button>
@@ -305,7 +313,11 @@ export function UpgradePlanModal({
           disabled={isAlreadyOnSelectedPlan}
           title={isAlreadyOnSelectedPlan ? "You're already on this plan" : undefined}
         >
-          {isPro ? `Switch to ${interval === "monthly" ? "Monthly" : "Yearly"}` : "Continue to checkout"}
+          {isPro
+            ? cancelAtPeriodEnd && interval === currentInterval
+              ? `Resume ${interval === "monthly" ? "Monthly" : "Yearly"}`
+              : `Switch to ${interval === "monthly" ? "Monthly" : "Yearly"}`
+            : "Continue to checkout"}
         </button>
       </div>
     </div>

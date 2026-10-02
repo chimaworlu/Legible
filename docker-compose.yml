@@ -13,4 +13,10 @@ services:
       - legible_data:/var/lib/postgresql/data
 
 volumes:
+  # Pinned to the actual pre-existing volume by name, not derived from the
+  # Compose project name — that derivation is what orphaned this data once
+  # already (a project-name change after a Docker Desktop restart pointed a
+  # fresh `up` at a brand-new empty volume instead of this one).
   legible_data:
+    external: true
+    name: project_legible_data

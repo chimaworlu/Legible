@@ -81,6 +81,11 @@ enum JobType {
   TRANSCRIBE
   STRUCTURE
   EXPORT
+  // Additive (AGENTS.md 2.3) — on-demand per-section summary, distinct from
+  // and never a replacement for the literal transcript. Runs in a worker job
+  // like every other AI call (AGENTS.md section 4, ai-pipeline.md law 12) —
+  // never called synchronously from a route.
+  SUMMARIZE
 }
 
 enum JobStatus {
@@ -111,6 +116,11 @@ enum TransactionType {
   SUBSCRIPTION_CHARGE
   CREDIT_PURCHASE
   CREDIT_SPEND
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
 }
 
 model User {
@@ -172,11 +182,31 @@ model Subscription {
   userId           String             @unique
   status           SubscriptionStatus @default(ACTIVE)
   // AUTO: paid by card with a Payment Plan attached — Flutterwave auto-
-  // charges each cycle. MANUAL: paid by transfer/USSD/other — Flutterwave
-  // cannot re-charge these, so the customer must check out again each
-  // period (see src/services/billing/reconcile.ts).
+  // charges each cycle. MANUAL: paid by transfer/USSD/other (R32 — never
+  // card-only), which Flutterwave cannot re-charge, so the customer must
+  // check out again each period (see src/services/billing/reconcile.ts).
   renewalMode      RenewalMode        @default(AUTO)
   currentPeriodEnd DateTime
+  // True once the user has asked to stop at currentPeriodEnd (see
+  // app/api/billing/cancel/route.ts) — access continues until then rather
+  // than being revoked immediately, since the period is already paid for.
+  // For an AUTO subscription with providerPlanId set, cancelling actually
+  // stops the Flutterwave-side renewal too (see
+  // cancelActiveSubscriptionsForPlan in flutterwave.ts); for older rows
+  // without one, it doesn't — Flutterwave may still charge on its own
+  // schedule regardless. A renewal charge that lands anyway resets this back
+  // to false in reconcileTransaction, since it means the subscription
+  // actually continued.
+  cancelAtPeriodEnd Boolean           @default(false)
+  // The Flutterwave Payment Plan id created exclusively for this user (see
+  // createUserPaymentPlan in flutterwave.ts) — never one of the old shared
+  // per-interval plan ids. Null on AUTO rows granted before this existed, and
+  // on any MANUAL row (no Payment Plan involved). Being unique to this user
+  // is what makes it safe to look up and cancel their Flutterwave
+  // subscription directly when they switch interval or cancel — the earlier
+  // shared-plan design couldn't do this safely (see providerCustomerEmail's
+  // doc comment below).
+  providerPlanId   String?
   providerRef      String?
   // The customer email Flutterwave itself recorded against the recurring
   // subscription it created for this grant (VerifiedTransaction.customerEmail)
@@ -196,6 +226,10 @@ model Book {
   userId    String
   title     String
   status    BookStatus    @default(DRAFT)
+  // Running total of AI spend against this book, in kobo (ai-pipeline.md
+  // law 11, PRD section 6 cost ceiling). Incremented atomically per
+  // successful TRANSCRIBE job — see bookRepo.incrementCostSpent.
+  aiCostSpentMinor Int    @default(0)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -244,6 +278,11 @@ model Section {
   order         Int
   originalText  String
   editedText    String?
+  // On-demand AI summary of originalText, kept in its own field so it is
+  // always displayed separately from — never blended into — the literal
+  // transcript (R10/R11's honesty spirit: a summary is clearly labeled
+  // AI-generated, not presented as what the student actually wrote).
+  summary       String?
   confidence    SectionConfidence   @default(HIGH)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -313,6 +352,13 @@ model Transaction {
   amountMinor Int?
   currency    String          @default("NGN")
   credits     Int?
+  // Only set for SUBSCRIPTION_CHARGE rows created after proration support
+  // was added. Null on older rows and on CREDIT_PURCHASE/CREDIT_SPEND —
+  // callers fall back to inferring interval from amountMinor for those
+  // (see domain/billing.ts fromDbInterval). Needed because a prorated
+  // switch no longer charges an amount that maps 1:1 to a single plan
+  // price, so the interval can't always be recovered from amountMinor alone.
+  interval    BillingInterval?
   reference   String?         @unique
   createdAt   DateTime        @default(now())
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -2,6 +2,23 @@ import nodemailer, { type Transporter } from "nodemailer";
 
 let transporter: Transporter | null = null;
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
 function getTransporter(): Transporter {
   if (transporter) return transporter;
 
@@ -53,6 +70,21 @@ export async function sendManualRenewalReminderEmail(to: string, renewsByDate: s
     subject: "Your Legible PRO plan is active — here's how renewal works",
     text: `Thanks for subscribing to PRO! Since you paid by transfer/USSD (rather than card), Flutterwave can't automatically charge you again next cycle — you'll need to come back and check out again before ${renewsByDate} to keep PRO active. We'll show a reminder on your dashboard as that date approaches.`,
     html: `<p>Thanks for subscribing to PRO!</p><p>Since you paid by transfer/USSD (rather than card), Flutterwave can't automatically charge you again next cycle — you'll need to come back and check out again before <strong>${renewsByDate}</strong> to keep PRO active.</p><p>We'll show a reminder on your dashboard as that date approaches.</p>`,
+  });
+}
+
+export async function sendContactMessageEmail(fields: { name: string; email: string; message: string }): Promise<void> {
+  const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
+  const to = process.env.CONTACT_EMAIL_TO || "legible.team@gmail.com";
+  const { name, email, message } = fields;
+
+  await getTransporter().sendMail({
+    from,
+    to,
+    replyTo: email,
+    subject: `New contact message from ${name}`,
+    text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+    html: `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${escapeHtml(email)}</p><p><strong>Message:</strong></p><p>${escapeHtml(message).replace(/\n/g, "<br/>")}</p>`,
   });
 }
 

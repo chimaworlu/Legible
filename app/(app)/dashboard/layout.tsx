@@ -3,7 +3,7 @@ import { authOptions } from "../../api/auth/[...nextauth]/route";
 import { userRepo } from "@/src/db/repositories/user";
 import { subscriptionRepo } from "@/src/db/repositories/subscription";
 import { transactionRepo } from "@/src/db/repositories/transaction";
-import { intervalForAmountMinor } from "@/src/domain/billing";
+import { fromDbInterval } from "@/src/domain/billing";
 import { UserMenu } from "@/src/components/dashboard/UserMenu";
 import { UpgradePlanButton } from "@/src/components/dashboard/UpgradePlanButton";
 
@@ -20,7 +20,7 @@ export default async function DashboardLayout({
     ? await Promise.all([subscriptionRepo.findByUserId(userId), transactionRepo.listForUser(userId)])
     : [null, []];
   const latestCharge = transactions.find((transaction) => transaction.type === "SUBSCRIPTION_CHARGE") ?? null;
-  const currentInterval = latestCharge?.amountMinor != null ? intervalForAmountMinor(latestCharge.amountMinor) : null;
+  const currentInterval = fromDbInterval(latestCharge?.interval, latestCharge?.amountMinor);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -32,6 +32,7 @@ export default async function DashboardLayout({
               plan={user?.plan ?? "FREE"}
               currentInterval={currentInterval}
               currentPeriodEnd={subscription?.currentPeriodEnd ?? null}
+              cancelAtPeriodEnd={subscription?.cancelAtPeriodEnd ?? false}
             />
             <UserMenu
               name={session?.user?.name || session?.user?.email || "Account"}

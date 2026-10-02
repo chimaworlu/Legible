@@ -37,7 +37,7 @@ const linkStyle: React.CSSProperties = {
 
 type BillingStatus = {
   plan: string;
-  subscription: { status: string; renewalMode: string; currentPeriodEnd: string } | null;
+  subscription: { status: string; renewalMode: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean } | null;
 };
 
 function formatDate(date: Date): string {
@@ -60,7 +60,9 @@ export function ManualRenewalBanner() {
   }, []);
 
   const subscription = status?.subscription;
-  if (!subscription || subscription.renewalMode !== "MANUAL" || subscription.status !== "ACTIVE") {
+  const isManual = subscription?.status === "ACTIVE" && subscription.renewalMode === "MANUAL";
+  const isCancelling = subscription?.status === "ACTIVE" && subscription.cancelAtPeriodEnd;
+  if (!subscription || (!isManual && !isCancelling)) {
     return null;
   }
 
@@ -68,12 +70,23 @@ export function ManualRenewalBanner() {
   const daysLeft = daysUntil(periodEnd, new Date());
   const isUrgent = daysLeft <= RENEWAL_WARNING_WINDOW_DAYS;
 
+  // A cancelled-but-still-AUTO plan only gets this heads-up once it's
+  // genuinely close to lapsing — the user already saw and confirmed the
+  // cancellation when they did it, so a reminder a year out is just noise.
+  // A MANUAL plan keeps the persistent reminder regardless of how far out
+  // it is, since nothing else will ever prompt the user to renew it.
+  if (isCancelling && !isManual && !isUrgent) {
+    return null;
+  }
+
+  const reason = isCancelling ? "is set to end" : "renews manually";
+
   return (
     <div role="status" style={containerStyle}>
       <span style={textStyle}>
         {isUrgent
-          ? `Your PRO plan renews manually and ${daysLeft <= 0 ? "has expired" : `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`} (${formatDate(periodEnd)}). Check out again to keep it active.`
-          : `Your PRO plan renews manually — active until ${formatDate(periodEnd)}.`}
+          ? `Your PRO plan ${reason} and ${daysLeft <= 0 ? "has expired" : `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`} (${formatDate(periodEnd)}). Check out again to keep it active.`
+          : `Your PRO plan ${reason} — active until ${formatDate(periodEnd)}.`}
       </span>
       <Link href="/checkout?interval=monthly" style={linkStyle}>
         Renew now

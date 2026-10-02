@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { config } from "@/src/config";
 
@@ -24,6 +24,11 @@ type SelectedFile = {
   file: File;
   id: string;
   status: "queued" | "uploading" | "done";
+  // A local blob: URL, not the R2 signed URL the book detail page uses —
+  // this exists purely so the user sees what they picked before any network
+  // request happens. Revoked on removal and on unmount (see the cleanup
+  // effect below) so selecting many large batches doesn't leak memory.
+  previewUrl: string;
 };
 
 const drawerStyle: React.CSSProperties = {
@@ -160,6 +165,36 @@ const fileCardStyle: React.CSSProperties = {
   gap: "1rem",
 };
 
+const fileCardLeftStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  minWidth: 0,
+};
+
+const fileThumbStyle: React.CSSProperties = {
+  width: "2.75rem",
+  height: "2.75rem",
+  borderRadius: "0.5rem",
+  objectFit: "cover",
+  flexShrink: 0,
+  backgroundColor: "var(--color-roles-surface-container-high)",
+};
+
+// Shown instead of a broken-image glyph when the browser can't decode the
+// picked file client-side — most notably HEIC/HEIF, which R1 accepts as a
+// valid upload format but which only Safari renders natively in an <img>.
+const fileThumbFallbackStyle: React.CSSProperties = {
+  ...fileThumbStyle,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontFamily: "var(--typography-label-medium-font-family)",
+  fontSize: "0.625rem",
+  fontWeight: 700,
+  color: "var(--color-roles-on-surface-variant)",
+};
+
 const removeButtonStyle: React.CSSProperties = {
   border: "none",
   background: "none",
@@ -180,6 +215,45 @@ const statusStyle: React.CSSProperties = {
 const errorStyle: React.CSSProperties = {
   color: "var(--color-roles-error)",
   fontFamily: "var(--typography-label-medium-font-family)",
+};
+
+const successContainerStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  textAlign: "center",
+  gap: "0.875rem",
+  padding: "var(--spacing-collection-very-large-spacing) var(--spacing-collection-base-spacing)",
+};
+
+const successTitleStyle: React.CSSProperties = {
+  fontFamily: "var(--typography-title-medium-font-family)",
+  fontSize: "var(--typography-title-medium-font-size)",
+  fontWeight: "var(--typography-title-medium-font-weight)",
+  color: "var(--color-roles-on-surface)",
+};
+
+const successDescriptionStyle: React.CSSProperties = {
+  fontFamily: "var(--typography-body-medium-font-family)",
+  fontSize: "var(--typography-body-medium-font-size)",
+  color: "var(--color-roles-on-surface-variant)",
+  maxWidth: "22rem",
+};
+
+const successButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  border: "none",
+  borderRadius: "0.5rem",
+  backgroundColor: "var(--color-roles-primary)",
+  color: "var(--color-roles-on-primary)",
+  padding: "0.75rem 1.5rem",
+  cursor: "pointer",
+  fontFamily: "var(--typography-label-large-font-family)",
+  fontSize: "0.9375rem",
+  fontWeight: "var(--typography-label-large-font-weight)",
+  marginTop: "0.25rem",
 };
 
 function CloseIcon() {
@@ -219,6 +293,23 @@ function UploadIcon() {
   );
 }
 
+function SuccessCheckIcon() {
+  return (
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.25" stroke="var(--color-roles-primary)" strokeWidth="1.5" />
+      <path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="var(--color-roles-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12h11M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const kib = bytes / 1024;
@@ -230,13 +321,33 @@ function isAcceptedImage(file: File): boolean {
   return ["image/jpeg", "image/png", "image/heic", "image/heif"].includes(file.type);
 }
 
+function FilePreviewThumb({ src, fileName }: { src: string; fileName: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    const ext = fileName.split(".").pop()?.toUpperCase().slice(0, 4) ?? "IMG";
+    return <div style={fileThumbFallbackStyle}>{ext}</div>;
+  }
+  return <img src={src} alt="" style={fileThumbStyle} onError={() => setFailed(true)} />;
+}
+
 export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookId, mode = "upload", imagesPerBook }: UploadDrawerProps) {
   const router = useRouter();
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadSucceeded, setUploadSucceeded] = useState(false);
   const maxPerBatch = Math.min(imagesPerBook ?? config.caps.batchImageLimit, config.caps.batchImageLimit);
+
+  // Lets the unmount-cleanup effect below always see the latest files
+  // without re-subscribing on every state change (it only needs to run once,
+  // at actual unmount — see its own comment). Synced in an effect, not
+  // during render: mutating a ref while rendering is unsafe even when
+  // idempotent (react-hooks/refs).
+  const filesRef = useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   useEffect(() => {
     if (!open) return;
@@ -248,6 +359,30 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
+
+  // The drawer stays mounted between opens (see the comment on the effect
+  // below), so a fresh open has to explicitly clear a success screen left
+  // over from the previous batch — otherwise reopening to upload more shows
+  // "Upload Complete!" again instead of the drop zone. Done by comparing
+  // against the previous `open` value directly in the render body (React's
+  // "adjusting state during render" pattern) rather than in an effect,
+  // which the lint rule flags as an avoidable cascading render
+  // (react-hooks/set-state-in-effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setUploadSucceeded(false);
+  }
+
+  // The drawer stays mounted (controlled by `open`, not conditionally
+  // rendered by its parent), so object URLs created via addFiles only get
+  // revoked here, on the rare actual unmount — removeFile handles the normal
+  // per-file case below.
+  useEffect(() => {
+    return () => {
+      filesRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    };
+  }, []);
 
   if (!open) return null;
 
@@ -263,8 +398,14 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
     setFiles((current) => {
       const existingIds = new Set(current.map((item) => item.id));
       const additions: SelectedFile[] = accepted
-        .map((file) => ({ file, id: `${file.name}-${file.lastModified}-${file.size}`, status: "queued" as const }))
-        .filter((item) => !existingIds.has(item.id));
+        .map((file) => ({ file, id: `${file.name}-${file.lastModified}-${file.size}`, status: "queued" as const, previewUrl: URL.createObjectURL(file) }))
+        .filter((item) => {
+          if (existingIds.has(item.id)) {
+            URL.revokeObjectURL(item.previewUrl); // duplicate of an already-selected file — its preview is never rendered
+            return false;
+          }
+          return true;
+        });
 
       const combined = [...current, ...additions];
       if (combined.length > maxPerBatch) {
@@ -272,12 +413,19 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
       } else {
         setError("");
       }
-      return combined.slice(0, maxPerBatch);
+      const kept = combined.slice(0, maxPerBatch);
+      const droppedByBatchCap = combined.slice(maxPerBatch);
+      droppedByBatchCap.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      return kept;
     });
   }
 
   function removeFile(id: string) {
-    setFiles((current) => current.filter((item) => item.id !== id));
+    setFiles((current) => {
+      const target = current.find((item) => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((item) => item.id !== id);
+    });
     setError("");
   }
 
@@ -308,12 +456,24 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
         return;
       }
 
-      setFiles((current) => current.map((item) => ({ ...item, status: "done" })));
+      // Refresh now so the underlying page's data (the book's image grid) is
+      // already current by the time "View My Notes" navigates there — the
+      // drawer itself stays open on the success screen until the user acts,
+      // rather than closing out from under them with no confirmation.
       router.refresh();
-      onUploaded?.();
+      files.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setFiles([]);
+      setUploadSucceeded(true);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleViewNotes() {
+    setUploadSucceeded(false);
+    onClose();
+    onUploaded?.();
+    if (bookId) router.push(`/dashboard/${bookId}`);
   }
 
   return (
@@ -330,68 +490,99 @@ export function UploadDrawer({ open, onClose, onUploaded, title: bookName, bookI
         </button>
       </div>
 
-      <div style={bodyStyle}>
-        <div
-          style={{
-            ...dropStyle,
-            borderColor: isDragging ? "var(--color-roles-primary)" : "var(--color-roles-surface-container-highest)",
-            backgroundColor: isDragging ? "var(--color-roles-primary-container)" : "var(--color-roles-surface-container-low)",
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setIsDragging(false);
-            addFiles(Array.from(event.dataTransfer.files));
-          }}
-        >
-          <label htmlFor="upload-files" style={dropLabelStyle}>
-            <UploadIcon />
-            <span style={dropTitleStyle}>Click or drag images here</span>
-            <span style={dropCaptionStyle}>JPEG, PNG, HEIC, HEIF · up to {maxPerBatch} per batch</span>
-            <input
-              id="upload-files"
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/heic,image/heif"
-              style={srOnlyStyle}
-              onChange={(event) => addFiles(Array.from(event.target.files ?? []))}
-            />
-          </label>
-        </div>
-
-        {files.length > 0 ? (
-          files.map((item) => (
-            <div key={item.id} style={fileCardStyle}>
-              <div>
-                <div style={{ fontFamily: "var(--typography-label-large-font-family)", fontWeight: "var(--typography-label-large-font-weight)" }}>{item.file.name}</div>
-                <div style={statusStyle}>
-                  {formatSize(item.file.size)} · {item.status}
-                </div>
-              </div>
-              <button type="button" style={removeButtonStyle} onClick={() => removeFile(item.id)} aria-label={`Remove ${item.file.name}`} title="Remove file">
-                <RemoveIcon />
-              </button>
+      {uploadSucceeded ? (
+        <div style={bodyStyle}>
+          <div style={successContainerStyle}>
+            <SuccessCheckIcon />
+            <div style={successTitleStyle}>Upload Complete!</div>
+            <div style={successDescriptionStyle}>
+              Your notes have been successfully saved to this book. You can view them below.
             </div>
-          ))
-        ) : (
-          <div style={statusStyle}>No files selected yet.</div>
-        )}
+            <button type="button" style={successButtonStyle} onClick={handleViewNotes}>
+              View My Notes
+              <ArrowRightIcon />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={bodyStyle}>
+            <div
+              style={{
+                ...dropStyle,
+                borderColor: isDragging ? "var(--color-roles-primary)" : "var(--color-roles-surface-container-highest)",
+                backgroundColor: isDragging ? "var(--color-roles-primary-container)" : "var(--color-roles-surface-container-low)",
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+                addFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
+              <label htmlFor="upload-files" style={dropLabelStyle}>
+                <UploadIcon />
+                <span style={dropTitleStyle}>Click or drag images here</span>
+                <span style={dropCaptionStyle}>JPEG, PNG, HEIC, HEIF · up to {maxPerBatch} per batch</span>
+                <input
+                  id="upload-files"
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/heic,image/heif"
+                  style={srOnlyStyle}
+                  onChange={(event) => addFiles(Array.from(event.target.files ?? []))}
+                />
+              </label>
+            </div>
 
-        {error && <div style={errorStyle}>{error}</div>}
-      </div>
+            {files.length > 0 ? (
+              files.map((item) => (
+                <div key={item.id} style={fileCardStyle}>
+                  <div style={fileCardLeftStyle}>
+                    <FilePreviewThumb src={item.previewUrl} fileName={item.file.name} />
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontFamily: "var(--typography-label-large-font-family)",
+                          fontWeight: "var(--typography-label-large-font-weight)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.file.name}
+                      </div>
+                      <div style={statusStyle}>
+                        {formatSize(item.file.size)} · {item.status}
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" style={removeButtonStyle} onClick={() => removeFile(item.id)} aria-label={`Remove ${item.file.name}`} title="Remove file">
+                    <RemoveIcon />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div style={statusStyle}>No files selected yet.</div>
+            )}
 
-      <div style={buttonRowStyle}>
-        <button type="button" onClick={onClose} style={secondaryButtonStyle}>
-          Cancel
-        </button>
-        <button type="button" onClick={handleUpload} disabled={submitting || files.length === 0} style={primaryButtonStyle(submitting || files.length === 0)}>
-          {submitting ? "Uploading…" : "Upload notes"}
-        </button>
-      </div>
+            {error && <div style={errorStyle}>{error}</div>}
+          </div>
+
+          <div style={buttonRowStyle}>
+            <button type="button" onClick={onClose} style={secondaryButtonStyle}>
+              Cancel
+            </button>
+            <button type="button" onClick={handleUpload} disabled={submitting || files.length === 0} style={primaryButtonStyle(submitting || files.length === 0)}>
+              {submitting ? "Uploading…" : "Upload notes"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

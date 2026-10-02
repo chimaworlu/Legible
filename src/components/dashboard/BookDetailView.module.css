@@ -1,0 +1,101 @@
+/* Responsive layout for the chapters/reader view — the one piece of this
+   component that genuinely needs a media query, which inline
+   React.CSSProperties objects (used everywhere else in this file) can't
+   express. Side-by-side above 640px; stacked below it, so the reading pane
+   gets full width on a phone instead of being squeezed into a narrow
+   column. */
+
+.readerWrapper {
+  margin-bottom: var(--spacing-collection-large-spacing);
+}
+
+/* Export/Delete: side-by-side buttons above 640px (room for both next to
+   the title), collapsed into one kebab menu below it — three separate tap
+   targets in the header row reads as cramped on a phone. */
+.headerButtonsFull {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.headerButtonsCompact {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .headerButtonsFull {
+    display: none;
+  }
+
+  .headerButtonsCompact {
+    display: block;
+  }
+}
+
+.readerSection {
+  /* No explicit height and no internal scroll — the card just grows to fit
+     all of its content (short or long), and the page itself scrolls, same
+     as the reference. The Summarize button stays put regardless (see
+     .summarizeButtonRow below) since it's anchored to the viewport, not to
+     this card's flow. */
+  display: flex;
+  background-color: var(--color-roles-surface-container-lowest);
+  border: 1px solid var(--color-roles-surface-container-highest);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.readerSidebar {
+  width: 13rem;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-roles-surface-container-highest);
+  padding: var(--spacing-collection-base-spacing);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background-color: var(--color-roles-surface-container-low);
+  overflow-y: auto;
+}
+
+.readerContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.readerScrollArea {
+  padding: var(--spacing-collection-large-spacing);
+}
+
+/* Fixed to the viewport corner (not part of document flow) — the card is
+   allowed to grow/shrink as the summary panel opens and closes (that's
+   normal, expected accordion behavior, same as the reference), but this
+   button must never move when it does. Anchoring to the viewport instead of
+   the page's flow is what makes that true regardless of scroll position or
+   how tall the panel gets. */
+.summarizeButtonRow {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 20;
+}
+
+@media (max-width: 640px) {
+  .readerSection {
+    flex-direction: column;
+  }
+
+  .readerSidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-roles-surface-container-highest);
+  }
+
+  .readerScrollArea {
+    padding: var(--spacing-collection-base-spacing);
+  }
+
+  .summarizeButtonRow {
+    bottom: 1rem;
+    right: 1rem;
+  }
+}

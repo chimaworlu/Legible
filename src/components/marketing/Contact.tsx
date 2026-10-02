@@ -24,10 +24,41 @@ const inputStyle: React.CSSProperties = {
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitted(true);
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.get("name"),
+          email: data.get("email"),
+          message: data.get("message"),
+        }),
+      });
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        setError(body?.message ?? "Could not send your message. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      setSubmitted(true);
+    } catch {
+      setError("Could not send your message. Please try again.");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -138,9 +169,23 @@ export default function Contact() {
               />
             </div>
 
+            {error && (
+              <span
+                role="alert"
+                style={{
+                  fontFamily: "var(--typography-label-medium-font-family)",
+                  fontSize: "var(--typography-label-medium-font-size)",
+                  color: "var(--color-roles-error)",
+                }}
+              >
+                {error}
+              </span>
+            )}
+
             <button
               type="submit"
               className="contact-submit-button"
+              disabled={submitting}
               style={{
                 marginTop: "var(--spacing-collection-small-spacing)",
                 backgroundColor: "var(--color-roles-primary)",
@@ -153,10 +198,11 @@ export default function Contact() {
                 fontWeight: "var(--typography-label-large-font-weight)",
                 lineHeight: "var(--typography-label-large-line-height)",
                 boxShadow: "var(--effect-soft-shadow)",
-                cursor: "pointer",
+                cursor: submitting ? "not-allowed" : "pointer",
+                opacity: submitting ? 0.7 : 1,
               }}
             >
-              Send message
+              {submitting ? "Sending…" : "Send message"}
             </button>
           </form>
         )}
