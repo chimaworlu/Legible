@@ -178,5 +178,6 @@ export const config = {
     processPerUser: { limit: 10, windowMs: 10 * 60 * 1000 },
     summarizePerUser: { limit: 20, windowMs: 10 * 60 * 1000 },
     exportPerUser: { limit: 10, windowMs: 10 * 60 * 1000 },
+    contactPerIp: { limit: 5, windowMs: 60 * 60 * 1000 }, // 5 / hour
   },
 };
