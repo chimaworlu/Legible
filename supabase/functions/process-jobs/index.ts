@@ -1,6 +1,7 @@
 import { jobRepo, bookRepo, sourceImageRepo, sectionRepo, userRepo, type JobRow } from "./db.ts";
 import { transcribeWithGemini, summarizeWithDeepseek } from "./ai.ts";
-import { getObjectBytes } from "./storage.ts";
+import { getObjectBytes, putBookExport } from "./storage.ts";
+import { renderBookPdf } from "./pdf.ts";
 import {
   checkImageQuality,
   checkCostCeiling,
@@ -11,13 +12,12 @@ import {
   sectionConfidenceFrom,
 } from "./domain.ts";
 
-// Raw port of worker/jobs/{transcribe,summarize}.ts + worker/index.ts's poll
-// loop, adapted to run as one bounded pass per invocation instead of a
-// persistent setInterval loop (AGENTS.md's "dedicated long-running worker
-// process" doesn't fit Vercel+Supabase-only hosting — see the conversation
-// that led here). Triggered on a schedule (Supabase cron) rather than
-// continuously polling. EXPORT (pdfkit) is NOT ported yet — pdfkit's Deno
-// compatibility is unverified; book export still needs a separate decision.
+// Raw port of worker/jobs/{transcribe,summarize,export}.ts + worker/
+// index.ts's poll loop, adapted to run as one bounded pass per invocation
+// instead of a persistent setInterval loop (AGENTS.md's "dedicated
+// long-running worker process" doesn't fit Vercel+Supabase-only hosting —
+// see the conversation that led here). Triggered on a schedule (Supabase
+// cron) rather than continuously polling.
 
 const BATCH_SIZE = 5;
 const CONFIDENCE_THRESHOLD = 0.8; // config.ai.confidenceThreshold
@@ -170,13 +170,38 @@ async function runSummarizeJob(job: JobRow): Promise<void> {
   await jobRepo.markSucceeded(job.id);
 }
 
+async function runExportJob(job: JobRow): Promise<void> {
+  await jobRepo.markRunning(job.id);
+  const context = { jobId: job.id, bookId: job.bookId };
+
+  const book = await bookRepo.findForUser(job.bookId, job.userId);
+  if (!book) {
+    await jobRepo.markFailed(job.id, `job=${job.id} book=${job.bookId}: book not found`);
+    return;
+  }
+
+  const sections = await sectionRepo.listForBook(job.bookId);
+  if (sections.length === 0) {
+    await jobRepo.markFailed(job.id, `job=${job.id} book=${job.bookId}: no transcribed sections to export`);
+    return;
+  }
+
+  try {
+    const pdfBytes = await renderBookPdf(book.title, sections);
+    await putBookExport(job.userId, job.bookId, pdfBytes);
+    await jobRepo.markSucceeded(job.id);
+  } catch (error) {
+    await jobRepo.markFailed(job.id, sanitizeError(error, context));
+  }
+}
+
 Deno.serve(async (req) => {
   const secret = Deno.env.get("PROCESS_JOBS_SECRET");
   if (secret && req.headers.get("x-process-jobs-secret") !== secret) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const summary = { transcribe: { picked: 0, done: 0 }, summarize: { picked: 0, done: 0 }, errors: [] as string[] };
+  const summary = { transcribe: { picked: 0, done: 0 }, summarize: { picked: 0, done: 0 }, export: { picked: 0, done: 0 }, errors: [] as string[] };
 
   try {
     const transcribeJobs = await jobRepo.listQueuedByType("TRANSCRIBE", BATCH_SIZE);
@@ -198,6 +223,17 @@ Deno.serve(async (req) => {
         summary.summarize.done++;
       } catch (error) {
         summary.errors.push(`summarize ${job.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    const exportJobs = await jobRepo.listQueuedByType("EXPORT", BATCH_SIZE);
+    summary.export.picked = exportJobs.length;
+    for (const job of exportJobs) {
+      try {
+        await runExportJob(job);
+        summary.export.done++;
+      } catch (error) {
+        summary.errors.push(`export ${job.id}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   } catch (error) {
