@@ -70,7 +70,10 @@ const nameStyle: React.CSSProperties = {
 const emailRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
+  flexWrap: "wrap",
   gap: "0.5rem",
+  rowGap: "0.375rem",
+  overflowWrap: "anywhere",
   marginTop: "0.25rem",
   fontFamily: "var(--typography-body-medium-font-family)",
   fontSize: "var(--typography-body-medium-font-size)",
@@ -157,7 +160,7 @@ export default async function ProfilePage() {
 
       <div style={identityCardStyle}>
         <div style={avatarStyle}>{initial}</div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={nameStyle}>{user.name || "No name set"}</div>
           <div style={emailRowStyle}>
             {user.email}
