@@ -99,11 +99,14 @@ export async function POST(req: Request) {
       return { user, responseBody };
     });
 
-    // Fire-and-forget: a failure here must not block or fail account
-    // creation. The verification code itself is intentionally NOT sent at
-    // signup — it's only generated/sent when the user clicks "Verify" on
-    // the dashboard (see EmailVerificationBanner + resend-verification route).
-    sendWelcomeEmail(user.email, user.name ?? "there").catch((err) => {
+    // Awaited (not fire-and-forget): on Vercel, background work can be
+    // frozen once a response is sent, so the send must complete before we
+    // return. A failure here still must not block or fail account creation,
+    // so it's caught and swallowed rather than surfaced as an error response.
+    // The verification code itself is intentionally NOT sent at signup —
+    // it's only generated/sent when the user clicks "Verify" on the
+    // dashboard (see EmailVerificationBanner + resend-verification route).
+    await sendWelcomeEmail(user.email, user.name ?? "there").catch((err) => {
       console.error("Failed to send welcome email", { userId: user.id, error: err instanceof Error ? err.message : err });
     });
 
