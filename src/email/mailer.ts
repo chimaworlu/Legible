@@ -38,9 +38,6 @@ function getTransporter(): Transporter {
     port: Number(SMTP_PORT),
     secure: SMTP_SECURE === "true",
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    // Force IPv4 resolution at the socket level to dodge IPv6-routing dead
-    // ends some hosts hit against SMTP providers.
-    family: 4,
   });
 
   return transporter;
@@ -59,7 +56,6 @@ function getFallbackTransporter(): Transporter {
     port: 465,
     secure: true,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    family: 4,
   });
 
   return fallbackTransporter;
@@ -132,13 +128,12 @@ export async function sendContactMessageEmail(fields: { name: string; email: str
 
 export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
   const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
-  const discordUrl = process.env.DISCORD_INVITE_URL || "https://discord.gg/REPLACE_ME";
 
   await sendMail({
     from,
     to,
-    subject: "Welcome to Legible! 🎉 Join our student community on Discord",
-    text: `Hi ${name},\n\nWelcome to Legible — you're all set! From here you can start turning photos of your handwritten notes into clean, structured digital books.\n\nWhile you get started, come join our Discord community, where other students hang out, share tips, and get help from the team:\n\n${discordUrl}\n\nSee you there!\n— The Legible Team`,
-    html: `<p>Hi ${name},</p><p>Welcome to Legible — you're all set! From here you can start turning photos of your handwritten notes into clean, structured digital books.</p><p>While you get started, come join our Discord community, where other students hang out, share tips, and get help from the team:</p><p><a href="${discordUrl}">👉 Join our Discord</a></p><p>See you there!<br/>— The Legible Team</p>`,
+    subject: "Welcome to Legible! 🎉",
+    text: `Hi ${name},\n\nWelcome to Legible — you're all set! From here you can start turning photos of your handwritten notes into clean, structured digital books.\n\n— The Legible Team`,
+    html: `<p>Hi ${name},</p><p>Welcome to Legible — you're all set! From here you can start turning photos of your handwritten notes into clean, structured digital books.</p><p>— The Legible Team</p>`,
   });
 }
