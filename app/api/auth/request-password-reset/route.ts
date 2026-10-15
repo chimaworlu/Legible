@@ -59,7 +59,9 @@ export async function POST(req: Request) {
     expiresAt: new Date(Date.now() + VERIFICATION_CODE_TTL_MS),
   });
 
-  sendPasswordResetEmail(user.email, code).catch((err) => {
+  // Awaited (not fire-and-forget): on Vercel, background work can be frozen
+  // once a response is sent, so the send must complete before we return.
+  await sendPasswordResetEmail(user.email, code).catch((err) => {
     console.error("Failed to send password reset email", { userId: user.id, error: err instanceof Error ? err.message : err });
   });
 

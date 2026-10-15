@@ -191,7 +191,10 @@ export async function reconcileTransaction(transactionId: string, source: Reconc
 
     if (renewalMode === "MANUAL") {
       const { user: grantedUser, currentPeriodEnd } = grantResult;
-      sendManualRenewalReminderEmail(grantedUser.email, currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })).catch((err) => {
+      // Awaited (not fire-and-forget): on Vercel, background work can be
+      // frozen once a response is sent, so the send must complete before
+      // reconcileTransaction returns.
+      await sendManualRenewalReminderEmail(grantedUser.email, currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })).catch((err) => {
         console.error("Failed to send manual renewal reminder email", { userId, error: err instanceof Error ? err.message : err });
       });
     }

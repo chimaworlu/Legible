@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 
 let transporter: Transporter | null = null;
+let fallbackTransporter: Transporter | null = null;
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
@@ -19,28 +20,69 @@ function escapeHtml(value: string): string {
   });
 }
 
-function getTransporter(): Transporter {
-  if (transporter) return transporter;
-
+function requireSmtpEnv() {
   const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
     throw new Error("SMTP configuration is missing required environment variables");
   }
+  return { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS };
+}
+
+function getTransporter(): Transporter {
+  if (transporter) return transporter;
+
+  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = requireSmtpEnv();
 
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
     secure: SMTP_SECURE === "true",
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    // Force IPv4 resolution at the socket level to dodge IPv6-routing dead
+    // ends some hosts hit against SMTP providers.
+    family: 4,
   });
 
   return transporter;
 }
 
+// Falls back to port 465 (implicit TLS) if the configured port (normally
+// 587/STARTTLS) can't connect — a different failure mode than auth/content
+// errors, so only a connection-stage error should trigger it.
+function getFallbackTransporter(): Transporter {
+  if (fallbackTransporter) return fallbackTransporter;
+
+  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = requireSmtpEnv();
+
+  fallbackTransporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: 465,
+    secure: true,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    family: 4,
+  });
+
+  return fallbackTransporter;
+}
+
+function isConnectionError(err: unknown): boolean {
+  const code = (err as { code?: string } | undefined)?.code;
+  return code === "ESOCKET" || code === "ETIMEDOUT" || code === "ECONNECTION" || code === "ECONNREFUSED";
+}
+
+async function sendMail(message: Parameters<Transporter["sendMail"]>[0]): Promise<void> {
+  try {
+    await getTransporter().sendMail(message);
+  } catch (err) {
+    if (!isConnectionError(err)) throw err;
+    await getFallbackTransporter().sendMail(message);
+  }
+}
+
 export async function sendVerificationEmail(to: string, code: string): Promise<void> {
   const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
 
-  await getTransporter().sendMail({
+  await sendMail({
     from,
     to,
     subject: "Verify your email address",
@@ -52,7 +94,7 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
 export async function sendPasswordResetEmail(to: string, code: string): Promise<void> {
   const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
 
-  await getTransporter().sendMail({
+  await sendMail({
     from,
     to,
     subject: "Reset your Legible password",
@@ -64,7 +106,7 @@ export async function sendPasswordResetEmail(to: string, code: string): Promise<
 export async function sendManualRenewalReminderEmail(to: string, renewsByDate: string): Promise<void> {
   const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
 
-  await getTransporter().sendMail({
+  await sendMail({
     from,
     to,
     subject: "Your Legible PRO plan is active — here's how renewal works",
@@ -78,7 +120,7 @@ export async function sendContactMessageEmail(fields: { name: string; email: str
   const to = process.env.CONTACT_EMAIL_TO || "legible.team@gmail.com";
   const { name, email, message } = fields;
 
-  await getTransporter().sendMail({
+  await sendMail({
     from,
     to,
     replyTo: email,
@@ -92,7 +134,7 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
   const from = process.env.EMAIL_FROM || "Legible <no-reply@legible.app>";
   const discordUrl = process.env.DISCORD_INVITE_URL || "https://discord.gg/REPLACE_ME";
 
-  await getTransporter().sendMail({
+  await sendMail({
     from,
     to,
     subject: "Welcome to Legible! 🎉 Join our student community on Discord",
