@@ -12,7 +12,16 @@ function client(): S3Client {
   const accessKeyId = Deno.env.get("R2_ACCESS_KEY_ID");
   const secretAccessKey = Deno.env.get("R2_SECRET_ACCESS_KEY");
   if (!accountId || !accessKeyId || !secretAccessKey) throw new Error("Cloudflare R2 credentials are not configured");
-  cachedClient = new S3Client({ region: "auto", endpoint: `https://${accountId}.r2.cloudflarestorage.com`, credentials: { accessKeyId, secretAccessKey } });
+  cachedClient = new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+    // Deno's node:zlib crc32 polyfill is buggy (ERR_OUT_OF_RANGE on real
+    // payloads — confirmed by isolating it in a throwaway test function) —
+    // skip the SDK's optional response checksum validation, which is what
+    // triggers it. R2 GetObject doesn't require it.
+    responseChecksumValidation: "WHEN_REQUIRED",
+  });
   return cachedClient;
 }
 
