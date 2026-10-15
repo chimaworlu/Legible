@@ -36,7 +36,11 @@ const drawerStyle: React.CSSProperties = {
   top: 0,
   right: 0,
   height: "100vh",
-  width: "min(100vw, 32rem)",
+  // 100% here, not 100vw — on mobile, vw commonly includes the scrollbar
+  // gutter width, making a position:fixed element wider than the actual
+  // visible screen and pushing its content (e.g. a long file name) past the
+  // right edge. % resolves against the same viewport without that quirk.
+  width: "min(100%, 32rem)",
   backgroundColor: "var(--color-roles-surface-container-lowest)",
   borderLeft: "1px solid var(--color-roles-surface-container-highest)",
   boxShadow: "var(--effect-medium-shadow)",
