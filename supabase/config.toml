@@ -1,0 +1,8 @@
+
+[functions.process-jobs]
+enabled = true
+# No JWT required — invoked by a cron trigger (and manually, for now) with a
+# shared secret checked inside the function itself (PROCESS_JOBS_SECRET),
+# not a Supabase auth token.
+verify_jwt = false
+entrypoint = "./functions/process-jobs/index.ts"

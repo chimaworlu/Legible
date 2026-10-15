@@ -37,6 +37,9 @@ env/
 # vercel
 .vercel
 
+# supabase CLI local cache
+supabase/.temp
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
