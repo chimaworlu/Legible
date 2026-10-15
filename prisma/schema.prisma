@@ -4,8 +4,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled (Supavisor transaction mode, port 6543) — used by the app at
+  // runtime so serverless invocations don't each hold their own Postgres
+  // connection.
+  url       = env("DATABASE_URL")
+  // Direct (port 5432) — used only for migrations, which need a real
+  // session rather than a transaction-mode pooled connection.
+  directUrl = env("DIRECT_URL")
 }
 
 model RateLimitBucket {
