@@ -143,6 +143,18 @@ export const config = {
     },
   },
 
+  worker: {
+    // The Supabase Edge Function that runs the AI pipeline (TRANSCRIBE/
+    // SUMMARIZE/EXPORT) — see supabase/functions/process-jobs. A cron job
+    // inside Supabase already invokes it every minute as the reliable
+    // fallback; these let the app nudge it immediately after enqueueing
+    // work too, so the common case doesn't wait up to a minute for the next
+    // tick. Both optional — if unset, the app just relies on cron alone
+    // (e.g. local dev with no deployed function).
+    processJobsUrl: process.env.PROCESS_JOBS_URL ?? '',
+    processJobsSecret: process.env.PROCESS_JOBS_SECRET ?? '',
+  },
+
   storage: {
     // Cloudflare R2 (AGENTS.md section 2.2, section 4) — the only object
     // store this app is allowed to use. R2 is S3-compatible, reached here
